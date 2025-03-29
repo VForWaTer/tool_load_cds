@@ -1,0 +1,14 @@
+services:
+  era5:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .cdsapirc:/root/.cdsapirc
+      - ./service-account.json:/root/service-account.json
+      - ./in:/in
+      - ./out:/out
+      - ./src:/src
+    environment:
+      - TOOL_RUN=download_era5_series
+    command: ["echo", "Run the tool like: docker compose run era5 python run.py"]
