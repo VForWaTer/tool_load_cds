@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Output folder
+out/
+
 # C extensions
 *.so
 
@@ -127,3 +130,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+.cdsapirc
+service-account.json
