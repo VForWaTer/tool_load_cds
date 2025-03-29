@@ -1,28 +1,41 @@
 tools:
-  foobar:
-    title: Foo Bar
-    description: A dummy tool to exemplify the YAML file
-    version: 0.1
+  download_era5_series:
+    title: Download ERA5 data
+    description: Download ERA5 data from the Copernicus Climate Data Store
     parameters:
-      foo_int: 
-        type: integer
-      foo_float:
+      longitude:
         type: float
-      foo_string:
-        type: string
-      foo_enum:
+        description: The longitude of the area of interest.
+      latitude:
+        type: float
+        description: The latitude of the area of interest.
+      variable:
         type: enum
         values:
-          - foo
-          - bar
-          - baz
-      foo_array:
-        type: integer
-        array: true
-    data:
-      foo_matrix:
-        extension: dat
-        description: A matrix file that can be read by numpy
-      foo_csv:
-        extension: csv
-        description: A standard formatted CSV file, for autoloading using pandas
+          - precipitation
+          - evaporation
+          - temperature
+      start_date:
+        type: datetime
+        description: The start date of the series.
+        default: 2010-01-01
+      end_date:
+        type: datetime
+        description: The end date of the series. If omitted, the current date will be used.
+        optional: true
+      cds_api_key:
+        type: string
+        description: > 
+         The CDS API key to use for the download. NOTE: You should mount the .cdsapirc file to /root/.cdsapirc in the container.
+         Pass cds_api_key (extremely unsafe) for development and local use only.
+        optional: true
+      backend:
+        type: enum
+        values:
+          - cds
+          - earthengine
+        description: > 
+          The backend to use for the download. 'cds' uses the Copernicus Climate Data Store API. You need to pass your own cds_api_key to use this backend. 
+          'earthengine' uses the Google Earth Engine API. Currently this tool only supports gcloud service account authentication. The accout needs to have
+          the Earth Engine API enabled and the project needs to be registered with Earth Engine.
+        default: cds
