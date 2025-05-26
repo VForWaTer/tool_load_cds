@@ -1,45 +1,25 @@
-# tool_template_python
+# tool_load_cds
 
-[![Docker Image CI](https://github.com/VForWaTer/tool_template_python/actions/workflows/docker-image.yml/badge.svg)](https://github.com/VForWaTer/tool_template_python/actions/workflows/docker-image.yml)
+[![Docker Image CI](https://github.com/VForWaTer/tool_load_cds/actions/workflows/docker-image.yml/badge.svg)](https://github.com/VForWaTer/tool_load_cds/actions/workflows/docker-image.yml)
 [![DOI](https://zenodo.org/badge/558416591.svg)](https://zenodo.org/badge/latestdoi/558416591)
 
-This is the template for a generic containerized Python tool following the [Tool Specification](https://vforwater.github.io/tool-specs/) for reusable research software using Docker.
+A containerized Python tool for downloading climate data from the Copernicus Climate Data Store (CDS) and Google Earth Engine (GEE). This tool follows the [Tool Specification](https://vforwater.github.io/tool-specs/) for reusable research software using Docker.
 
-This template can be used to generate new Github repositories from it.
+## Features
 
-
-## How generic?
-
-Tools using this template can be run by the [toolbox-runner](https://github.com/hydrocode-de/tool-runner). 
-That is only convenience, the tools implemented using this template are independent of any framework.
-
-The main idea is to implement a common file structure inside container to load inputs and outputs of the 
-tool. The template shares this structures with the [R template](https://github.com/vforwater/tool_template_r),
-[NodeJS template](https://github.com/vforwater/tool_template_node) and [Octave template](https://github.com/vforwater/tool_template_octave), 
-but can be mimiced in any container.
-
-Each container needs at least the following structure:
-
-```
-/
-|- in/
-|  |- parameters.json
-|- out/
-|  |- ...
-|- src/
-|  |- tool.yml
-|  |- run.py
-```
-
-* `parameters.json` are parameters. Whichever framework runs the container, this is how parameters are passed.
-* `tool.yml` is the tool specification. It contains metadata about the scope of the tool, the number of endpoints (functions) and their parameters
-* `run.py` is the tool itself, or a Python script that handles the execution. It has to capture all outputs and either `print` them to console or create files in `/out`
+- Download ERA5 climate data (precipitation, evaporation, temperature)
+- Download CMIP6 climate projections
+- Support for multiple backends:
+  - Copernicus Climate Data Store (CDS)
+  - Google Earth Engine (GEE)
+- Output in both CSV and Parquet formats
+- Point-based data extraction
 
 ## How to build the image?
 
 You can build the image from within the root of this repo by
 ```
-docker build -t tbr_python_tempate .
+docker build -t tool_load_cds .
 ```
 
 Use any tag you like. If you want to run and manage the container with [toolbox-runner](https://github.com/hydrocode-de/tool-runner)
@@ -50,37 +30,84 @@ on new releases on Github. You need to change the target repository in the afore
 
 ## How to run?
 
-This template installs the json2args python package to parse the parameters in the `/in/parameters.json`. This assumes that
+This tool installs the json2args python package to parse the parameters in the `/in/inputs.json`. This assumes that
 the files are not renamed and not moved and there is actually only one tool in the container. For any other case, the environment variables
-`PARAM_FILE` can be used to specify a new location for the `parameters.json` and `TOOL_RUN` can be used to specify the tool to be executed.
-The `run.py` has to take care of that.
+`PARAM_FILE` can be used to specify a new location for the `inputs.json` and `TOOL_RUN` can be used to specify the tool to be executed.
+
+### Authentication
+
+#### For CDS backend:
+You need to provide authentication for the Copernicus Climate Data Store. You have two options:
+1. Mount your `.cdsapirc` file to `/root/.cdsapirc` in the container
+2. Pass your CDS API key via the `cds_api_key` parameter (not recommended for production use)
+
+#### For Earth Engine backend:
+You need to mount your Google Cloud service account JSON file to `/root/service-account.json` in the container. The service account must have Earth Engine API enabled and the project must be registered with Earth Engine.
+
+### Example Usage
 
 To invoke the docker container directly run something similar to:
 ```
-docker run --rm -it -v /path/to/local/in:/in -v /path/to/local/out:/out -e TOOL_RUN=foobar tbr_python_template
+docker run --rm -it \
+  -v /path/to/local/in:/in \
+  -v /path/to/local/out:/out \
+  -v /path/to/.cdsapirc:/root/.cdsapirc \
+  -e TOOL_RUN=download_era5_series \
+  tool_load_cds
 ```
 
-Then, the output will be in your local out and based on your local input folder. Stdout and Stderr are also connected to the host.
-
-With the [toolbox runner](https://github.com/hydrocode-de/tool-runner), this is simplyfied:
+With the [toolbox runner](https://github.com/hydrocode-de/tool-runner), this is simplified:
 
 ```python
 from toolbox_runner import list_tools
 tools = list_tools() # dict with tool names as keys
 
-foobar = tools.get('foobar')  # it has to be present there...
-foobar.run(result_path='./', foo_int=1337, foo_string="Please change me")
+download_era5 = tools.get('download_era5_series')
+download_era5.run(
+    result_path='./', 
+    longitude=8.4, 
+    latitude=49.0, 
+    variable="precipitation", 
+    start_date="2020-01-01", 
+    end_date="2020-12-31",
+    backend="cds"
+)
 ```
+
 The example above will create a temporary file structure to be mounted into the container and then create a `.tar.gz` on termination of all 
 inputs, outputs, specifications and some metadata, including the image sha256 used to create the output in the current working directory.
 
-## What about real tools, no foobar?
+## Available Tools
 
-Yeah. 
+### download_era5_series
+Downloads ERA5 climate data for a specific location and time period.
 
-1. change the `tool.yml` to describe your actual tool
-2. add any `pip install` or `apt-get install` needed to the dockerfile
-3. add additional source code to `/src`
-4. change the `run.py` to consume parameters and data from `/in` and useful output in `out`
-5. build, run, rock!
+Parameters:
+- `longitude`: The longitude of the area of interest
+- `latitude`: The latitude of the area of interest
+- `variable`: The climate variable to download (precipitation, evaporation, temperature)
+- `start_date`: The start date of the series (default: 2010-01-01)
+- `end_date`: The end date of the series (optional, defaults to current date)
+- `cds_api_key`: The CDS API key (optional, see authentication section)
+- `backend`: The backend to use (cds or earthengine, default: cds)
+
+### download_cmip6_series
+Downloads CMIP6 climate projections for a specific location and time period.
+
+Parameters:
+- `longitude`: The longitude of the area of interest
+- `latitude`: The latitude of the area of interest
+- `variable`: The climate variable to download (precipitation, temperature)
+- `start_date`: The start date of the series (default: 2025-01-01)
+- `end_date`: The end date of the series (default: 2050-12-31)
+- `model`: The GCM model to use (default: "EC-Earth3")
+- `scenario`: The scenario to use (ssp245, ssp585, default: "ssp585")
+
+## Output
+
+The tool saves the downloaded data in two formats:
+1. CSV file: `/out/{prefix}{variable}.csv`
+2. Parquet file: `/out/{prefix}{variable}.parquet`
+
+Where `{prefix}` is either "era5_" or "cmip6_{model}_{scenario}_" depending on the tool used.
 

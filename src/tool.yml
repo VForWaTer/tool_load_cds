@@ -39,3 +39,38 @@ tools:
           'earthengine' uses the Google Earth Engine API. Currently this tool only supports gcloud service account authentication. The accout needs to have
           the Earth Engine API enabled and the project needs to be registered with Earth Engine.
         default: cds
+  
+  download_cmip6_series:
+    title: Download CMIP6 data
+    description: Download CMIP6 data from the Copernicus Climate Data Store or Google Earth Engine
+    parameters:
+      longitude:
+        type: float
+        description: The longitude of the area of interest.
+      latitude:
+        type: float
+      variable:
+        type: enum
+        values:
+          - precipitation
+          - temperature
+      start_date:
+        type: datetime
+        description: The start date of the series.
+        default: 2025-01-01
+      end_date:
+        type: datetime
+        description: The end date of the series. If omitted, the current date will be used.
+        default: 2050-12-31
+      model:
+        type: string
+        description: The GCM model to use.
+        default: "EC-Earth3"
+      scenario:
+        type: enum
+        values:
+          - ssp245
+          - ssp585
+        description: The scenario to use.
+        default: "ssp585"
+        
