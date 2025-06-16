@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""
+Optimized CMIP6 Point Extraction Script
+
+This script automates:
+ - Dependency checks and installs (earthengine-api, pandas)
+ - Earth Engine authentication if not already authenticated
+ - Parsing of command‑line arguments (including models list)
+ - Export to GCS (no manual bucket edits needed)
+ - Optional direct download for small jobs
+
+Usage:
+    python optimized_export.py \
+      --lon 8.4037 --lat 49.0069 \
+      --variable precipitation \
+      --scenario ssp585 \
+      --models GFDL-ESM4,EC-Earth3,MIROC6,UKESM1-0-LL,MPI-ESM1-2-HR \
+      --start 1975-06-12 \
+      --end None \
+      --bucket camels_plus_cazs
+
+"""
+import sys
+import subprocess
+import importlib
+from datetime import datetime
+
+# -- Dependency check & install ------------------------------------------------
+def ensure_package(pkg_name, import_name=None):
+    import_name = import_name or pkg_name
+    try:
+        importlib.import_module(import_name)
+    except ImportError:
+        print(f"[INFO] Installing {pkg_name}...")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg_name])
+
+# Ensure required packages are present
+def setup_dependencies():
+    ensure_package('earthengine-api', 'ee')
+    ensure_package('pandas')
+    ensure_package('argparse')
+    ensure_package('json2args')  # if using json2args
+
+# -- Argument parsing -----------------------------------------------------------
+import argparse
+
+def parse_args():
+    p = argparse.ArgumentParser(
+        description='Extract CMIP6 point time series and export/pivot.'
+    )
+    p.add_argument('--lon',  type=float, required=True, help='Longitude')
+    p.add_argument('--lat',  type=float, required=True, help='Latitude')
+    p.add_argument('--variable', required=True, help='CMIP6 variable name (e.g. precipitation)')
+    p.add_argument('--scenario', required=True, help='SSP scenario (e.g. ssp585)')
+    p.add_argument('--models', required=False,
+                   help='Comma-separated CMIP6 model short names; default all')
+    p.add_argument('--start', required=True, help='Start date YYYY-MM-DD')
+    p.add_argument('--end',   required=False, help='End date YYYY-MM-DD or None')
+    p.add_argument('--bucket', required=True, help='GCS bucket name')
+    return p.parse_args()
+
+# -- Earth Engine auth & init ---------------------------------------------------
+
+def ee_auth_initialize():
+    import ee
+    try:
+        ee.Initialize()
+    except Exception:
+        print("[INFO] Authenticating Earth Engine...")
+        ee.Authenticate(auth_mode='notebook')
+        ee.Initialize()
+    return ee
+
+# -- Main workflow --------------------------------------------------------------
+def main():
+    setup_dependencies()
+
+    # Now import modules
+    import ee
+    import pandas as pd
+    from json2args import get_parameter  # if still using json2args elsewhere
+    # Project-specific mapping modules (assume on PYTHONPATH)
+    from params import map_dataset, map_variable, EE_CMIP6_MODELS_SHORT
+
+    args = parse_args()
+
+    # Build point
+    point = ee.Geometry.Point(args.lon, args.lat)
+
+    # Parse dates
+    start_date = datetime.strptime(args.start, '%Y-%m-%d')
+    end_date = datetime.now() if args.end in (None, 'None') else datetime.strptime(args.end, '%Y-%m-%d')
+
+    # Authenticate & init
+    ee = ee_auth_initialize()
+
+    # Map variable & dataset
+    variable_band = map_variable(args.variable, 'cmip6', 'earthengine')
+    dataset_id    = map_dataset('cmip6', 'earthengine')
+    collection    = ee.ImageCollection(dataset_id)
+
+    # Filter by date, scenario, models
+    collection = (collection
+        .filterDate(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        .filter(ee.Filter.eq('scenario', args.scenario)))
+    model_list = args.models.split(',') if args.models else EE_CMIP6_MODELS_SHORT
+    collection = collection.filter(ee.Filter.inList('model', model_list))
+
+    print(f"[*] Extracting {args.variable} from {start_date.date()} to {end_date.date()}"
+          f" at ({args.lat},{args.lon}) for scenario {args.scenario} and models {model_list}")
+
+    # Define extraction function
+    def extract_feature(image):
+        date = image.date().format('YYYY-MM-dd')
+        model = image.get('model')
+        value = (image
+                 .reduceRegion(ee.Reducer.first(), geometry=point,
+                               scale=image.projection().nominalScale())
+                 .get(variable_band))
+        return ee.Feature(None, {'date': date, 'model': model,
+                                  'value': ee.Algorithms.If(value, value, -9999)})
+
+    features = collection.map(extract_feature)
+
+    # Attempt local getInfo
+    try:
+        info = features.getInfo()['features']
+        df = pd.DataFrame([f['properties'] for f in info])
+        df['date'] = pd.to_datetime(df['date'])
+        pivot = df.pivot(index='date', columns='model', values='value')
+        pivot.columns = [f"{args.variable}_{m.replace('-', '_')}" for m in pivot.columns]
+        outfile = f"{args.variable}_{args.scenario}_pivoted.csv"
+        pivot.sort_index().to_csv(outfile)
+        print(f"[SUCCESS] Saved pivoted CSV → {outfile}")
+        sys.exit(0)
+    except Exception as e:
+        print(f"[WARN] Local download failed ({e}); falling back to GCS export...")
+
+    # Fallback: export to GCS
+    task = ee.batch.Export.table.toCloudStorage(
+        collection=features,
+        description=f"CMIP6_{args.variable}_{args.scenario}",
+        bucket=args.bucket,
+        fileNamePrefix=f"{args.variable}_{args.scenario}_timeseries",
+        fileFormat='CSV',
+        selectors=['date','model','value']
+    )
+    task.start()
+    print(f"[INFO] Export task started. Check EE Tasks tab and bucket {args.bucket}.")
+
+if __name__ == '__main__':
+    main()
