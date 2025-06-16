@@ -10,5 +10,6 @@ services:
       - ./out:/out
       - ./src:/src
     environment:
-      - TOOL_RUN=download_era5_series
-    command: ["echo", "Run the tool like: docker compose run era5 python run.py"]
+      # TOOL_RUN: download_era5_series
+      TOOL_RUN: download_cmip6_series
+    command: ["echo", "Run the tool like: docker compose run --rm era5 python run.py"]
