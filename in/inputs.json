@@ -17,7 +17,7 @@
             "longitude": 8.0,
             "latitude": 48.0,
             "backend": "earthengine",
-            "model": "EC-Earth3",
+            "model": ["EC-Earth3"],
             "scenario": "ssp585"
         }
     }
