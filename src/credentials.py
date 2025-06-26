@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import ee
 
 
@@ -21,6 +22,7 @@ def build_ee_credentials(credentials_path: str | Path = None):
     if not credentials_path.exists():
         raise ValueError(f"Credentials file not found at {credentials_path}. Right now you need to mount the service-account.json file to /root/service-account.json. It needs the earth engine API activated and the cloud project needs to be registered for Earth Engine.")
     
+    os.environ.setdefault('GOOGLE_APPLICATION_CREDENTIALS', str(credentials_path.resolve()))
     credentials = ee.ServiceAccountCredentials(
         email=None,
         key_file=str(credentials_path)
