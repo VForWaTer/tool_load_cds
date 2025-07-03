@@ -12,4 +12,7 @@ services:
     environment:
       # TOOL_RUN: download_era5_series
       TOOL_RUN: download_cmip6_series
+      
+      # CHANGE this bucket name, if you change the service account to your account
+      BUCKET: vfw_ee_export
     command: ["echo", "Run the tool like: docker compose run --rm era5 python run.py"]
