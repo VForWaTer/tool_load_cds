@@ -1,6 +1,4 @@
-from pathlib import Path
 from uuid import uuid4
-import tempfile
 from datetime import datetime, timedelta
 import pandas as pd
 import ee
@@ -8,7 +6,7 @@ from json2args.logger import logger
 from google.cloud import storage
 import time
 
-from params import Params, ParamsCMIP6, map_dataset, map_variable, EE_CMIP6_MODELS, EE_CMIP6_MODELS_SHORT
+from params import Params, ParamsCMIP6, map_dataset, map_variable
 
 FAIL_MESSAGE = """Direct data fetch failed: {e}
 This usually happens when the dataset is too large to download directly via getInfo().
