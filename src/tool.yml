@@ -111,5 +111,5 @@ tools:
         default: "ssp585"
       bucket:
         type: string
-        default: camels_plus_cazs
+        default: ee_loader_export
         

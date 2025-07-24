@@ -1,13 +1,30 @@
 import datetime
-from pydantic import BaseModel
+from typing import List, Union
+from pydantic import BaseModel, validator
+from pydantic_geojson import PolygonModel
 
 
 class Params(BaseModel):
     variable: str
     start_date: datetime.datetime
     end_date: datetime.datetime | None = None
-    longitude: float
-    latitude: float
+    longitude: float | None = None
+    latitude: float | None = None
+    area: PolygonModel | None = None  # GeoJSON Polygon
+    
+    @validator('area')
+    def validate_geometry(cls, v, values):
+        """Ensure either point (lon/lat) or polygon (area) is provided, but not both"""
+        # Check that we have either point or polygon, but not both
+        has_point = values.get('longitude') is not None and values.get('latitude') is not None
+        has_polygon = v is not None
+        
+        if not has_point and not has_polygon:
+            raise ValueError("Either longitude/latitude (point) or area (polygon) must be provided")
+        if has_point and has_polygon:
+            raise ValueError("Cannot provide both point (longitude/latitude) and polygon (area) geometries")
+        
+        return v
 
 class ParamsCMIP6(Params):
     model: list[str]

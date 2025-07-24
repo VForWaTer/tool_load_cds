@@ -18,8 +18,29 @@ Once complete, your CSV will be available in the '{bucket}' Google Cloud Storage
 You will need to manually pivot the data using Pandas/Excel after downloading it from GCS if you want models as columns.
 """
 
+def create_ee_geometry(kwargs: Params):
+    """Create Earth Engine geometry from kwargs parameters"""
+    if False:# kwargs.area is not None:
+        # Create polygon geometry from GeoJSON
+        # pydantic-geojson stores coordinates as [lon, lat] pairs
+        coordinates = kwargs.area.coordinates
+        return ee.Geometry.Polygon(coordinates)
+    else:
+        # Create point geometry
+        return ee.Geometry.Point(kwargs.longitude, kwargs.latitude)
+
+def get_reducer_for_geometry(kwargs: Params):
+    """Get appropriate reducer based on geometry type"""
+    if False: #kwargs.area is not None:
+        # For polygons, use mean to aggregate all pixels within the area
+        return ee.Reducer.mean()
+    else:
+        # For points, use first to get the single pixel value
+        return ee.Reducer.first()
+
 def download_era5_series(kwargs: Params) -> pd.DataFrame:
-    point = ee.Geometry.Point(kwargs.longitude, kwargs.latitude)
+    geometry = create_ee_geometry(kwargs)
+    reducer = get_reducer_for_geometry(kwargs)
 
     start_date = kwargs.start_date
     if kwargs.end_date is None:
@@ -46,11 +67,11 @@ def download_era5_series(kwargs: Params) -> pd.DataFrame:
             current_end.strftime("%Y-%m-%d")
         ).select(variable_name)
 
-        # Get values at the point location for each day
+        # Get values at the geometry location for each day
         def get_value(image):
             value = image.reduceRegion(
-                reducer=ee.Reducer.first(),
-                geometry=point,
+                reducer=reducer,
+                geometry=geometry,
                 scale=1000
             ).get(variable_name)
             return ee.Feature(None, {
@@ -77,8 +98,9 @@ def download_era5_series(kwargs: Params) -> pd.DataFrame:
     return df
 
 
-def download_cmip6_series(kwargs: ParamsCMIP6) -> pd.DataFrame:
-    point = ee.Geometry.Point(kwargs.longitude, kwargs.latitude)
+def download_cmip6_series(kwargs: ParamsCMIP6, autodelete: bool = True) -> pd.DataFrame:
+    geometry = create_ee_geometry(kwargs)
+    reducer = get_reducer_for_geometry(kwargs)
     
     start_date = kwargs.start_date
     if kwargs.end_date is None:
@@ -110,10 +132,10 @@ def download_cmip6_series(kwargs: ParamsCMIP6) -> pd.DataFrame:
         # Use the nominal scale of the image's projection
         scale = image.projection().nominalScale()
 
-        # Reduce region to get the value at the point
+        # Reduce region to get the value at the geometry
         value = image.reduceRegion(
-            reducer=ee.Reducer.first(), # Use first() for single point extraction
-            geometry=point,
+            reducer=reducer,
+            geometry=geometry,
             scale=scale,
             crs=image.projection()
         ).get(band_name) # Get the value for the specific variable band
@@ -189,7 +211,9 @@ def download_cmip6_series(kwargs: ParamsCMIP6) -> pd.DataFrame:
         with blob.open() as f:
             df = pd.read_csv(f)
         
-        blob.delete()
+        if autodelete:
+            blob.delete()
+            
         return df
     else:
         logger.error(f"Export failed: {task.status()}")

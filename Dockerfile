@@ -16,7 +16,9 @@ RUN pip install "json2args[data]>=0.7.0" \
     "xarray==2025.1.1" \
     "earthengine-api==1.5.8" \
     "gcloud==0.18.3" \
-    "h5netcdf==1.6.1"
+    "h5netcdf==1.6.1" \
+    "duckdb==1.3.2" \
+    "pydantic-geojson"
 
 # create the tool input structure
 RUN mkdir /in

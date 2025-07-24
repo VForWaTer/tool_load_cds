@@ -8,11 +8,23 @@ services:
       - ./service-account.json:/root/service-account.json
       - ./in:/in
       - ./out:/out
+      - ./cache:/cache
       - ./src:/src
     environment:
       # TOOL_RUN: download_era5_series
       TOOL_RUN: download_cmip6_series
-      
-      # CHANGE this bucket name, if you change the service account to your account
-      BUCKET: vfw_ee_export
+      AUTODELETE: true
+      CACHE_PATH: /out
     command: ["echo", "Run the tool like: docker compose run --rm era5 python run.py"]
+
+  gorun:
+    image: ghcr.io/hydrocode-de/gorun:latest
+    ports:
+      - 8080:8080
+    volumes:
+      # add the docker socket to the container
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./gorun/gorun:/data/gorun
+    environment:
+      GORUN_SECRET: "test-secret"
+      GORUN_PORT: 8080
